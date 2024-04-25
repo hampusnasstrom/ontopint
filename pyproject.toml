@@ -14,6 +14,9 @@ authors = [
     { name = "Hampus Näsström", email = 'hampus.naesstroem@physik.hu-berlin.de' },
     { name = "Fabian Kirchner" },
     { name = "Simon Stier" },
+    { name = "Fabio Lopes" },
+    { name = "Despoina Adamopoulou" },
+    { name = "Samantha Pearman-Kanza"}
 ]
 maintainers = [
   { name = "Hampus Näsström", email = 'hampus.naesstroem@physik.hu-berlin.de' }
@@ -27,6 +30,7 @@ classifiers = [
 dependencies = [
     "rdflib",
     "pint",
+    "pyld",
 ]
 [project.optional-dependencies]
 dev = [
