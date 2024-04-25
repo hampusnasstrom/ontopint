@@ -1,0 +1,33 @@
+{
+    "@context": {
+      "qudt": "http://qudt.org/schema/qudt/",
+      "qunit": "http://qudt.org/vocab/unit/",
+      "qkind": "http://qudt.org/vocab/quantkind/",
+      "my_unit": {
+        "@id": "qudt:hasUnit",
+        "@type": "@id"
+      },
+      "quantity": {
+        "@id": "qudt:hasQuantityKind",
+        "@type": "@id"
+      },
+      "my_value": "qudt:value",
+      "band_gap": "http://example.org/BandGap",
+      "mass": "http://example.org/Mass",
+      "type": "@type",
+      "sample_id": "@id"
+    },
+    "sample_id": "HUB_HaNa_20240424_Sample-1",
+    "band_gap" : {
+      "type": "qudt:Quantity",
+      "quantity": "qkind:GapEnergy",
+      "my_value": 1.9,
+      "my_unit": "qunit:EV"
+    },
+    "mass": {
+      "type": "qudt:Quantity",
+      "quantity": "qkind:Mass",
+      "my_value": 3201.3,
+      "my_unit": "qunit:MilliGM"
+    }
+  }
