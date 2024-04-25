@@ -31,6 +31,7 @@ dependencies = [
     "rdflib",
     "pint",
     "pyld",
+    "ucumvert",
 ]
 [project.optional-dependencies]
 dev = [
