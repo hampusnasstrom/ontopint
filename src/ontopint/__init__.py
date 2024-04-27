@@ -18,6 +18,14 @@ processing_context = {
     'value': 'qudt:value',
 }
 
+def get_ucum_code_from_unit_iri(unit_iri):
+    graph = rdflib.Graph()
+    graph.parse(unit_iri)
+    result = graph.query(
+        f'SELECT * WHERE {{<{unit_iri}> <http://qudt.org/schema/qudt/ucumCode> ?ucumCode}}'
+    )
+    ucum_code = str(result.bindings[0]['ucumCode'])
+    return ucum_code 
 class UnitDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
@@ -55,14 +63,9 @@ def _replace_units(obj, context, original_key_lookup_dict):
                     {"@context": {**context, "urn:ontopint:iri": {"@type": "@id"}}, "urn:ontopint:iri": compacted_obj["unit"]}, {}
                 )[0]["urn:ontopint:iri"][0]["@id"]
             obj.pop(original_key_lookup_dict['unit'])
-            graph = rdflib.Graph()
-            graph.parse(unit_iri)
-            result = graph.query(
-                f'SELECT * WHERE {{<{unit_iri}> <http://qudt.org/schema/qudt/symbol> ?ucumCode}}'
-            )
-            unit = result.bindings[0]['ucumCode']
+            ucum_code = get_ucum_code_from_unit_iri(unit_iri)
             obj[original_key_lookup_dict['value']] = ureg.Quantity(
-                obj[original_key_lookup_dict['value']], ureg.from_ucum(unit)
+                obj[original_key_lookup_dict['value']], ureg.from_ucum(ucum_code)
             )
         for key, value in obj.items():
             obj[key] = _replace_units(value, context, original_key_lookup_dict)
