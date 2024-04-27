@@ -6,6 +6,7 @@ from pyld import jsonld
 
 # from pint import UnitRegistry
 from ucumvert import PintUcumRegistry
+import pint
 
 # ureg = UnitRegistry()
 ureg = PintUcumRegistry()
@@ -100,6 +101,33 @@ def _replace_units(obj, context, original_key_lookup_dict):
         ]
     else:
         return obj
+    
+def _serialize_units(obj, context, original_key_lookup_dict):
+    if isinstance(obj, dict):
+        for key in list(obj.keys()): # make a list copy in order to delete keys while iterating
+            value = obj[key]
+            if (isinstance(value, pint.Quantity)):
+                # see https://pint.readthedocs.io/en/stable/user/formatting.html
+                quantity_value = float(format(value, 'f#~').split(' ')[0])
+                unit_code = format(value.u, '~') 
+                # ToDo: use ucum code
+                unit_iri = get_qunit_iri_from_unit_code(unit_code)
+                # note: "urn:ontopint:iri" is just any iri not existing in the input data
+                unit_compact_iri = jsonld.compact(
+                    {"@context": {**context, "urn:ontopint:iri": {"@type": "@id"}}, "urn:ontopint:iri": unit_iri}, 
+                    {**context, "urn:ontopint:iri": {"@type": "@id"}}
+                )["urn:ontopint:iri"]
+                obj[original_key_lookup_dict['value']] = quantity_value
+                obj[original_key_lookup_dict['unit']] = unit_compact_iri
+
+            else: obj[key] = _serialize_units(value, context, original_key_lookup_dict)
+        return obj
+    elif isinstance(obj, list):
+        return [
+            _serialize_units(value, context, original_key_lookup_dict) for value in obj
+        ]
+    else:
+        return obj
 
 
 def parse_units(json_ld: dict) -> dict:
@@ -113,5 +141,21 @@ def parse_units(json_ld: dict) -> dict:
     # reverse the dict
     original_key_lookup_dict = {v: k for k, v in compacted.items()}
     parsed_json = _replace_units(json_ld, original_context, original_key_lookup_dict)
-    parsed_json['@context'] = original_context
+    parsed_json = {'@context': original_context, **parsed_json}
+    json_ld['@context'] = original_context # restore context
+    return parsed_json
+
+def export_units(json_ld: dict, context = processing_context) -> dict:
+    original_context = json_ld.pop('@context', context)
+    key_dict = {'@context': processing_context, 'unit': 'unit', 'value': 'value'}
+    # inverse expand-reverse cycle
+    expanded = jsonld.expand(key_dict, processing_context)
+    compacted = jsonld.compact(expanded, original_context)
+    # remove the context
+    del compacted['@context']
+    # reverse the dict
+    original_key_lookup_dict = {v: k for k, v in compacted.items()}
+    parsed_json = _serialize_units(json_ld, original_context, original_key_lookup_dict)
+    parsed_json = {'@context': original_context, **parsed_json}
+    json_ld['@context'] = original_context # restore context
     return parsed_json
