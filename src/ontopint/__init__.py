@@ -1,5 +1,6 @@
 import json
 
+import SPARQLWrapper
 import rdflib
 from pyld import jsonld
 
@@ -26,6 +27,29 @@ def get_ucum_code_from_unit_iri(unit_iri):
     )
     ucum_code = str(result.bindings[0]['ucumCode'])
     return ucum_code 
+
+def get_qunit_iri_from_unit_code(code, is_ucum_code = False):
+    sparql = SPARQLWrapper.SPARQLWrapper("https://www.qudt.org/fuseki/qudt/sparql")
+
+    sparql.setMethod(SPARQLWrapper.POST)
+    code = "'" + code + "'"
+    query = """
+        SELECT ?subject
+        WHERE {
+            ?subject <{{{predicate}}}> {{{code}}} .
+        }
+        LIMIT 1
+    """.replace(
+        "{{{predicate}}}", "http://qudt.org/schema/qudt/ucumCode" if is_ucum_code else "http://qudt.org/schema/qudt/symbol"
+    ).replace(
+        "{{{code}}}", code + "^^<http://qudt.org/schema/qudt/UCUMcs>" if is_ucum_code else code
+    )
+    sparql.setQuery(query)
+    sparql.setReturnFormat(SPARQLWrapper.JSON)
+    result = sparql.query().convert()
+    result = result['results']['bindings'][0]['subject']['value']
+    return result
+
 class UnitDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
