@@ -18,10 +18,6 @@ processing_context = {
     'value': 'qudt:value',
 }
 
-HAS_UNIT = 'http://qudt.org/schema/qudt/hasUnit'
-VALUE = 'http://qudt.org/schema/qudt/value'
-
-
 class UnitDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
@@ -51,9 +47,13 @@ class UnitDecoder(json.JSONDecoder):
 
 def _replace_units(obj, context, original_key_lookup_dict):
     if isinstance(obj, dict):
-        expanded_obj = jsonld.expand({**obj, '@context': context}, context)
-        if HAS_UNIT in expanded_obj[0] and VALUE in expanded_obj[0]:
-            unit_iri = expanded_obj[0][HAS_UNIT][0]['@id']
+        expanded_obj = jsonld.expand({**obj, "@context": context}, context)
+        compacted_obj = jsonld.compact(expanded_obj, processing_context)
+        if 'unit' in compacted_obj and 'value' in compacted_obj:
+            # note: "urn:ontopint:iri" is just any iri not existing in the input data
+            unit_iri = jsonld.expand(
+                    {"@context": {**context, "urn:ontopint:iri": {"@type": "@id"}}, "urn:ontopint:iri": compacted_obj["unit"]}, {}
+                )[0]["urn:ontopint:iri"][0]["@id"]
             obj.pop(original_key_lookup_dict['unit'])
             graph = rdflib.Graph()
             graph.parse(unit_iri)
