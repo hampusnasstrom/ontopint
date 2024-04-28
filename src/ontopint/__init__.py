@@ -110,7 +110,8 @@ def _serialize_units(obj, context, original_key_lookup_dict):
             value = obj[key]
             if (isinstance(value, pint.Quantity)):
                 # see https://pint.readthedocs.io/en/stable/user/formatting.html
-                quantity_value = float(format(value, 'f#~').split(' ')[0])
+                # value = value.to_base_units() # this will not work until we have ucum support
+                quantity_value = float(format(value, 'f~').split(' ')[0])
                 unit_code = format(value.u, '~') 
                 # ToDo: use ucum code
                 unit_iri = get_qunit_iri_from_unit_code(unit_code)
