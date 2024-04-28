@@ -13,3 +13,6 @@ def test_qudt_sparql_api():
     assert (get_qunit_iri_from_unit_code("kg") == "http://qudt.org/vocab/unit/KiloGM")
     assert (get_qunit_iri_from_unit_code("kg", True) == "http://qudt.org/vocab/unit/KiloGM")
     assert (get_ucum_code_from_unit_iri("http://qudt.org/vocab/unit/KiloGM") == "kg")
+
+    assert (get_qunit_iri_from_unit_code("m") == "http://qudt.org/vocab/unit/M")
+    assert (get_qunit_iri_from_unit_code("m", True) == "http://qudt.org/vocab/unit/M")

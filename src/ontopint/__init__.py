@@ -30,6 +30,7 @@ def get_ucum_code_from_unit_iri(unit_iri):
     return ucum_code 
 
 def get_qunit_iri_from_unit_code(code, is_ucum_code = False):
+    # testing: https://www.qudt.org/fuseki/#/dataset/qudt/query
     sparql = SPARQLWrapper.SPARQLWrapper("https://www.qudt.org/fuseki/qudt/sparql")
 
     sparql.setMethod(SPARQLWrapper.POST)
@@ -37,6 +38,7 @@ def get_qunit_iri_from_unit_code(code, is_ucum_code = False):
     query = """
         SELECT ?subject
         WHERE {
+            ?subject <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://qudt.org/schema/qudt/Unit> .
             ?subject <{{{predicate}}}> {{{code}}} .
         }
         LIMIT 1
