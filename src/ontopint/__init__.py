@@ -1,10 +1,12 @@
 import json
 
+import SPARQLWrapper
 import rdflib
 from pyld import jsonld
 
 # from pint import UnitRegistry
 from ucumvert import PintUcumRegistry
+import pint
 
 # ureg = UnitRegistry()
 ureg = PintUcumRegistry()
@@ -18,9 +20,38 @@ processing_context = {
     'value': 'qudt:value',
 }
 
-HAS_UNIT = 'http://qudt.org/schema/qudt/hasUnit'
-VALUE = 'http://qudt.org/schema/qudt/value'
+def get_ucum_code_from_unit_iri(unit_iri):
+    graph = rdflib.Graph()
+    graph.parse(unit_iri)
+    result = graph.query(
+        f'SELECT * WHERE {{<{unit_iri}> <http://qudt.org/schema/qudt/ucumCode> ?ucumCode}}'
+    )
+    ucum_code = str(result.bindings[0]['ucumCode'])
+    return ucum_code 
 
+def get_qunit_iri_from_unit_code(code, is_ucum_code = False):
+    # testing: https://www.qudt.org/fuseki/#/dataset/qudt/query
+    sparql = SPARQLWrapper.SPARQLWrapper("https://www.qudt.org/fuseki/qudt/sparql")
+
+    sparql.setMethod(SPARQLWrapper.POST)
+    code = "'" + code + "'"
+    query = """
+        SELECT ?subject
+        WHERE {
+            ?subject <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://qudt.org/schema/qudt/Unit> .
+            ?subject <{{{predicate}}}> {{{code}}} .
+        }
+        LIMIT 1
+    """.replace(
+        "{{{predicate}}}", "http://qudt.org/schema/qudt/ucumCode" if is_ucum_code else "http://qudt.org/schema/qudt/symbol"
+    ).replace(
+        "{{{code}}}", code + "^^<http://qudt.org/schema/qudt/UCUMcs>" if is_ucum_code else code
+    )
+    sparql.setQuery(query)
+    sparql.setReturnFormat(SPARQLWrapper.JSON)
+    result = sparql.query().convert()
+    result = result['results']['bindings'][0]['subject']['value']
+    return result
 
 class UnitDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
@@ -51,18 +82,17 @@ class UnitDecoder(json.JSONDecoder):
 
 def _replace_units(obj, context, original_key_lookup_dict):
     if isinstance(obj, dict):
-        expanded_obj = jsonld.expand({**obj, '@context': context}, context)
-        if HAS_UNIT in expanded_obj[0] and VALUE in expanded_obj[0]:
-            unit_iri = expanded_obj[0][HAS_UNIT][0]['@id']
+        expanded_obj = jsonld.expand({**obj, "@context": context}, context)
+        compacted_obj = jsonld.compact(expanded_obj, processing_context)
+        if 'unit' in compacted_obj and 'value' in compacted_obj:
+            # note: "urn:ontopint:iri" is just any iri not existing in the input data
+            unit_iri = jsonld.expand(
+                    {"@context": {**context, "urn:ontopint:iri": {"@type": "@id"}}, "urn:ontopint:iri": compacted_obj["unit"]}, {}
+                )[0]["urn:ontopint:iri"][0]["@id"]
             obj.pop(original_key_lookup_dict['unit'])
-            graph = rdflib.Graph()
-            graph.parse(unit_iri)
-            result = graph.query(
-                f'SELECT * WHERE {{<{unit_iri}> <http://qudt.org/schema/qudt/symbol> ?ucumCode}}'
-            )
-            unit = result.bindings[0]['ucumCode']
+            ucum_code = get_ucum_code_from_unit_iri(unit_iri)
             obj[original_key_lookup_dict['value']] = ureg.Quantity(
-                obj[original_key_lookup_dict['value']], ureg.from_ucum(unit)
+                obj[original_key_lookup_dict['value']], ureg.from_ucum(ucum_code)
             )
         for key, value in obj.items():
             obj[key] = _replace_units(value, context, original_key_lookup_dict)
@@ -70,6 +100,34 @@ def _replace_units(obj, context, original_key_lookup_dict):
     elif isinstance(obj, list):
         return [
             _replace_units(value, context, original_key_lookup_dict) for value in obj
+        ]
+    else:
+        return obj
+    
+def _serialize_units(obj, context, original_key_lookup_dict):
+    if isinstance(obj, dict):
+        for key in list(obj.keys()): # make a list copy in order to delete keys while iterating
+            value = obj[key]
+            if (isinstance(value, pint.Quantity)):
+                # see https://pint.readthedocs.io/en/stable/user/formatting.html
+                # value = value.to_base_units() # this will not work until we have ucum support
+                quantity_value = float(format(value, 'f~').split(' ')[0])
+                unit_code = format(value.u, '~') 
+                # ToDo: use ucum code
+                unit_iri = get_qunit_iri_from_unit_code(unit_code)
+                # note: "urn:ontopint:iri" is just any iri not existing in the input data
+                unit_compact_iri = jsonld.compact(
+                    {"@context": {**context, "urn:ontopint:iri": {"@type": "@id"}}, "urn:ontopint:iri": unit_iri}, 
+                    {**context, "urn:ontopint:iri": {"@type": "@id"}}
+                )["urn:ontopint:iri"]
+                obj[original_key_lookup_dict['value']] = quantity_value
+                obj[original_key_lookup_dict['unit']] = unit_compact_iri
+
+            else: obj[key] = _serialize_units(value, context, original_key_lookup_dict)
+        return obj
+    elif isinstance(obj, list):
+        return [
+            _serialize_units(value, context, original_key_lookup_dict) for value in obj
         ]
     else:
         return obj
@@ -86,5 +144,21 @@ def parse_units(json_ld: dict) -> dict:
     # reverse the dict
     original_key_lookup_dict = {v: k for k, v in compacted.items()}
     parsed_json = _replace_units(json_ld, original_context, original_key_lookup_dict)
-    parsed_json['@context'] = original_context
+    parsed_json = {'@context': original_context, **parsed_json}
+    json_ld['@context'] = original_context # restore context
+    return parsed_json
+
+def export_units(json_ld: dict, context = processing_context) -> dict:
+    original_context = json_ld.pop('@context', context)
+    key_dict = {'@context': processing_context, 'unit': 'unit', 'value': 'value'}
+    # inverse expand-reverse cycle
+    expanded = jsonld.expand(key_dict, processing_context)
+    compacted = jsonld.compact(expanded, original_context)
+    # remove the context
+    del compacted['@context']
+    # reverse the dict
+    original_key_lookup_dict = {v: k for k, v in compacted.items()}
+    parsed_json = _serialize_units(json_ld, original_context, original_key_lookup_dict)
+    parsed_json = {'@context': original_context, **parsed_json}
+    json_ld['@context'] = original_context # restore context
     return parsed_json

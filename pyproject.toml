@@ -29,6 +29,7 @@ classifiers = [
 ]
 dependencies = [
     "rdflib",
+    "sparqlwrapper",
     "pint",
     "pyld",
     "ucumvert",
@@ -36,6 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "deepdiff",
 ]
 
 [project.license]
