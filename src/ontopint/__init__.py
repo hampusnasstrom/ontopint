@@ -20,7 +20,24 @@ processing_context = {
     'value': 'qudt:value',
 }
 
-def get_ucum_code_from_unit_iri(unit_iri):
+def get_ucum_code_from_unit_iri(unit_iri: str) -> str:
+    """Fetches the units JSON-LD document from the resolveable `unit_iri`
+    and extracts the `ucum_code`
+
+    Parameters
+    ----------
+    unit_iri
+        resolveable IRI of the units JSON-LD document
+
+    Returns
+    -------
+        the units ucum code
+
+    Example
+    -------
+    >>> get_ucum_code_from_unit_iri('http://qudt.org/vocab/unit/KiloGM')
+    'kg'
+    """
     graph = rdflib.Graph()
     graph.parse(unit_iri)
     result = graph.query(
@@ -29,7 +46,27 @@ def get_ucum_code_from_unit_iri(unit_iri):
     ucum_code = str(result.bindings[0]['ucumCode'])
     return ucum_code 
 
-def get_qunit_iri_from_unit_code(code, is_ucum_code = False):
+def get_qunit_iri_from_unit_code(code: str, is_ucum_code: bool = False) -> str:
+    """Queries the QUDT SPARQL endpoint to 
+
+    Parameters
+    ----------
+    code
+        the unit code
+    is_ucum_code
+        Whether the unit code is a http://qudt.org/schema/qudt/symbol (False)
+        or a http://qudt.org/schema/qudt/ucumCode (True)
+
+
+    Returns
+    -------
+        the units IRI
+
+    Example
+    -------
+    >>> get_qunit_iri_from_unit_code('kg')
+    'http://qudt.org/vocab/unit/KiloGM'
+    """
     # testing: https://www.qudt.org/fuseki/#/dataset/qudt/query
     sparql = SPARQLWrapper.SPARQLWrapper("https://www.qudt.org/fuseki/qudt/sparql")
 
@@ -134,6 +171,38 @@ def _serialize_units(obj, context, original_key_lookup_dict):
 
 
 def parse_units(json_ld: dict) -> dict:
+    """Replaces keys mapped to `qudt:value` in a nested JSON-LD dict with <pint.Quantity>
+    if a unit specification per `qudt:hasUnit` was found on the same level.
+    Note: Every nesting needs to maps to some term in the JSON-LD @context.
+    This can also be achieved with `@vocab`.
+
+    Parameters
+    ----------
+    json_ld
+        a JSON-LD document as python dict
+
+    Returns
+    -------
+        a JSON-LD document as python dict with values replaced with <pint.Quantity>
+
+    Examples
+    --------
+    >>> ontopint.parse_units({
+            "@context": {
+                "qudt": "http://qudt.org/schema/qudt/",
+                "qunit": "http://qudt.org/vocab/unit/",
+                "unit": { "@id": "qudt:hasUnit", "@type": "@id" },
+                "value": "qudt:value"
+            },
+            "value": 4.0,
+            "unit": "qunit:CentiM"
+        })
+    {
+        '@context': {...},
+        'value': <Quantity(4.0, 'centimeter')>
+    }
+    """
+
     original_context = json_ld.pop('@context')
     key_dict = {'@context': processing_context, 'unit': 'unit', 'value': 'value'}
     # inverse expand-reverse cycle
@@ -149,6 +218,40 @@ def parse_units(json_ld: dict) -> dict:
     return parsed_json
 
 def export_units(json_ld: dict, context = processing_context) -> dict:
+    """Replaces the value of keys mapped to `qudt:value` in a nested JSON-LD dict
+    if they are of type <pint.Quantity> with their plain numeric value
+    while a unit specification per `qudt:hasUnit` is generated on the same level.
+    Note: Every nesting needs to maps to some term in the JSON-LD @context.
+    This can also be achieved with `@vocab`.
+
+    Parameters
+    ----------
+    json_ld
+        a JSON-LD document as python dict with values of type <pint.Quantity>
+
+    Returns
+    -------
+        a JSON-LD document as python dict with values as plain floats and a unit
+        specification per `qudt:hasUnit`
+
+    Examples
+    --------
+    >>> ontopint.parse_units({
+            '@context': {...},
+            'value': <Quantity(4.0, 'centimeter')>
+        })
+    {
+        '@context': {
+            'qudt': 'http://qudt.org/schema/qudt/',
+            'qunit': 'http://qudt.org/vocab/unit/',
+            'unit': { '@id': 'qudt:hasUnit', '@type': '@id' },
+            'value': 'qudt:value'
+        },
+        'value': 4.0,
+        'unit': 'qunit:CentiM'
+    }
+    """
+    
     original_context = json_ld.pop('@context', context)
     key_dict = {'@context': processing_context, 'unit': 'unit', 'value': 'value'}
     # inverse expand-reverse cycle
